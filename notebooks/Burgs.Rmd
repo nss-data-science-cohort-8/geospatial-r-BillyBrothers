@@ -19,8 +19,63 @@ library(tidyverse)
 library(sf)
 burglaries <- read_csv('../data/burglaries_2023.csv')
 census <- read_csv('../data/census.csv')
-DC <- read_sf('../data/DC')
+DC <- st_read('../data/DC')
 ```
+
+```{r}
+DC |> 
+  ggplot() +
+  geom_sf()
+```
+
+```{r}
+burglaries
+```
+
+```{r}
+census
+```
+
+```{r}
+DC
+```
+
+```{r}
+DC <- DC |> 
+  mutate(
+    latitude = as.numeric(INTPTLAT),
+    longitude = as.numeric(INTPTLON)
+    )
+```
+
+
+
+```{r}
+burglar_geo <- st_as_sf(
+  burglaries |> drop_na('latitude','longitude'), 
+  coords = c('longitude', 'latitude'),
+  crs = st_crs(DC)
+)
+burglar_geo
+```
+
+```{r}
+burgs_dc <- st_join(burglar_geo, DC, join = st_within, left = FALSE) |> 
+ st_drop_geometry()
+burgs_dc
+```
+
+```{r}
+burgs_dc <- burgs_dc |>
+  mutate(tract = as.numeric(TRACTCE))
+burgs_dc
+```
+
+```{r}
+census <- census |> 
+  mutate(tract = as.numeric(tract))
+```
+
 
 
 
@@ -28,13 +83,69 @@ DC <- read_sf('../data/DC')
 
 Now, merge in the census data. **Note:** Make sure that the final dataset contains all census tracts (there are some census tracts that had no burglaries).
 
+```{r}
+burgs_dc_census <- full_join(burgs_dc, census, by='tract')
+burgs_dc_census
+```
+
 Perform some exploraty analysis on your prepared dataset.
+
+use summary()
+
+
+```{r}
+burgs_dc_census |> 
+  filter(grepl('WHITE', incident_location)) |> 
+  count()
+```
+```{r}
+burgs_dc_census |> 
+  filter(zip_code == '37210')
+```
+
 
 Aggregate the data by census tract. **Warning:** each incident can appear multiple times if there are multiple victims, so be sure that you aren't double-counting any incidents. 
 
+
+```{r}
+burg_tract <- burgs_dc_census |> 
+  group_by(tract, population) |> 
+  distinct(incident_number, .keep_all = TRUE)
+```
+
+
+
 Which census tract had the highest number of burglaries? Which census tract had the highest number of burglaries per 1000 residents? 
 
-Finally, look at the relationship between median income and number of aggravated burglaries per tract. How would you describe this relationship?
+```{r}
+burg_tract |> 
+  count(tract) |> 
+  arrange(desc(n))
+```
+```{r}
+burg_tract |>
+  count(tract, sort=TRUE) |> 
+  mutate(burgs_per_1000 = (n * 1000)/population)
+```
+
+
+*Finally, look at the relationship between median income and number of aggravated burglaries per tract. How would you describe this relationship?*
+
+
+offense_description
+tract
+
+```{r}
+burgs_dc_census |> 
+  distinct(incident_number, .keep_all = TRUE) |> 
+  group_by(tract, offense_description, median_income) |> 
+  count(tract) |>
+  #arrange(desc(median_income>0))
+  ggplot(aes(x=median_income, y=n))+
+  geom_point()+ 
+  xlim(0,200000)
+  
+```
 
 ### Bonus: Statistical Modeling
 
